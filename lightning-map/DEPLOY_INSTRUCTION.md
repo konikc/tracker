@@ -1,5 +1,11 @@
 # 🚀 Инструкция по деплою на Netlify (БЕСПЛАТНО)
 
+## ⚠️ ВАЖНО: Исправлена ошибка "Page Not Found"
+
+Если вы получили ошибку 404 на Netlify, выполните следующие шаги:
+
+---
+
 ## Почему Netlify лучше Vercel для этого проекта:
 - ✅ **Netlify Functions** - встроенные serverless функции для обхода CORS
 - ✅ **Бесплатный тариф** - 100GB bandwidth, 125k function invocations/month
@@ -17,7 +23,7 @@ cd /workspace/lightning-map
 # Инициализация Git
 git init
 git add .
-git commit -m "⚡ Lightning Map Russia - готово к деплою"
+git commit -m "⚡ Lightning Map Russia - исправлен деплой на Netlify"
 
 # Создаём репозиторий на GitHub и пушим
 git branch -M main
@@ -37,9 +43,9 @@ git push -u origin main
 4. **Выберите GitHub** и авторизуйтесь
 5. **Найдите ваш репозиторий** `lightning-map`
 6. **Настройте сборку:**
-   - Build command: `npm run build`
-   - Publish directory: `dist`
-   - Functions directory: `netlify/functions`
+   - **Build command:** `npm run build`
+   - **Publish directory:** `dist`
+   - **Functions directory:** `netlify/functions` (автоматически определяется)
 7. **Нажмите "Deploy site"**
 
 ### Вариант B: Через Netlify CLI
@@ -58,6 +64,53 @@ netlify deploy --prod
 
 ---
 
+## 🔧 ИСПРАВЛЕНИЕ ОШИБКИ 404
+
+Если после деплоя вы видите **"Page Not Found"**:
+
+### Причина:
+Netlify не может найти `index.html` потому что:
+1. Неправильно указана папка публикации
+2. Отсутствует файл `netlify.toml`
+3. Функции не собрались правильно
+
+### Решение:
+
+✅ **Проверьте настройки в панели Netlify:**
+
+1. Зайдите в **Site settings** → **Build & deploy**
+2. Нажмите **Edit settings**
+3. Убедитесь что:
+   - **Base directory:** (пусто)
+   - **Publish directory:** `dist`
+   - **Functions directory:** `netlify/functions`
+   - **Build command:** `npm run build`
+
+✅ **Проверьте наличие файлов:**
+
+```bash
+cd /workspace/lightning-map
+ls -la dist/index.html           # должен существовать
+ls -la netlify.toml              # должен существовать
+ls -la netlify/functions/        # должна быть папка с функциями
+```
+
+✅ **Пересоберите и запушьте:**
+
+```bash
+cd /workspace/lightning-map
+npm run build
+git add .
+git commit -m "🔧 Fix: пересборка для Netlify"
+git push origin main
+```
+
+✅ **В панели Netlify:**
+1. Зайдите в **Deploys**
+2. Нажмите **Trigger deploy** → **Clear cache and deploy site**
+
+---
+
 ## 📋 Шаг 3: Проверка работы
 
 После деплоя вы получите URL вида: `https://ваш-сайт.netlify.app`
@@ -68,6 +121,11 @@ netlify deploy --prod
 3. 🔊 Звук "тык" при новых молниях
 4. 🔔 Уведомления работают (нажмите "Уведомления ✅")
 5. 📍 Геолокация определяется
+
+### Проверка API:
+Откройте консоль браузера (F12) и проверьте:
+- Нет ли ошибок CORS
+- Запрос на `/api/blitzortung` возвращает данные
 
 ---
 
@@ -83,7 +141,8 @@ lightning-map/
 │   └── thunder.mp3      # Звук грома
 ├── netlify/
 │   └── functions/
-│       └── proxy-blitzortung.js  # Serverless функция для API
+│       ├── proxy-blitzortung.js  # Serverless функция для API (ES6 модуль)
+│       └── package.json          # Конфигурация bundler'а
 ├── netlify.toml         # Конфигурация Netlify
 ├── package.json
 └── dist/                # Сборка (создаётся автоматически)
@@ -143,10 +202,10 @@ lightning-map/
 ## ❓ Troubleshooting
 
 ### Проблема: CORS ошибки
-**Решение:** Netlify Function уже настроена для обхода CORS
+**Решение:** Netlify Function уже настроена для обхода CORS. Проверьте что функция развернулась в панели Netlify → Functions
 
 ### Проблема: Нет реальных молний
-**Решение:** Включён демо-режим (автоматически если API недоступен)
+**Решение:** Включён демо-режим (автоматически если API недоступен). Проверьте логи функций в панели Netlify
 
 ### Проблема: Не работает звук
 **Решение:** Нажмите любую кнопку на странице (браузеры блокируют автовоспроизведение)
@@ -156,6 +215,9 @@ lightning-map/
 1. Проверьте разрешения браузера
 2. На ПК: Chrome/Firefox/Edge поддерживают
 3. На Android: Chrome поддерживает
+
+### Проблема: Page Not Found (404)
+**Решение:** См. раздел "ИСПРАВЛЕНИЕ ОШИБКИ 404" выше
 
 ---
 
@@ -179,7 +241,7 @@ lightning-map/
 | Платформа | Бесплатный лимит | Плюсы | Минусы |
 |-----------|------------------|-------|--------|
 | **Netlify** | 100GB + 125k функций | Serverless функции, простой деплой | - |
-| **Vercel** | 100GB | Быстрый CDN | Нет бесплатных serverless функций для CORS |
+| **Vercel** | 100GB | Быстрый CDN | Проблемы с CORS без функций |
 | **GitHub Pages** | Безлимит | Простой хостинг | Нет serverless функций |
 | **Cloudflare Pages** | Безлимит | Быстрый CDN | Сложнее настройка функций |
 

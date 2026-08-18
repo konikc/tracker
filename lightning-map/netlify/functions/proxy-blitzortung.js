@@ -1,6 +1,7 @@
-const https = require('https');
+// Netlify Function - Proxy for Blitzortung API (ES6 Module)
+import https from 'https';
 
-exports.handler = async (event, context) => {
+export const handler = async (event, context) => {
   const url = 'https://data.blitzortung.org/Data_Region_7/Processed/JSON/Lightning.GeoJSON';
   
   return new Promise((resolve, reject) => {
