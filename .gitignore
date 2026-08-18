@@ -1,0 +1,59 @@
+```
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+target/
+
+# Environment
+.env
+.env.local
+.env.*
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+.ENV
+.python-version
+
+# Logs
+*.log
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Thumbs.db:encryptable
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*.tmp
+
+# Testing
+.coverage
+htmlcov/
+coverage/
+.nyc_output/
+
+# Package manager
+package-lock.json
+yarn.lock
+
+# Vite specific
+!.gitignore
+```
