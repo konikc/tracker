@@ -1,57 +1,74 @@
 # ⚡ Карта Молний России
 
-Real-time приложение для отслеживания ударов молний на карте России с использованием данных от Blitzortung.org
+Интерактивная карта молний для России с real-time данными от Blitzortung, звуковыми эффектами и push-уведомлениями.
 
-## 🔥 Функции
+## 🌟 Возможности
 
-- 🗺️ Интерактивная карта России (Leaflet + OpenStreetMap)
-- ⚡ Real-time данные о молниях через API Blitzortung
-- 🔊 Звуковой эффект при каждом ударе молнии ("тык")
-- 🔔 Push-уведомления на ПК и телефон при молниях рядом
-- 📍 Геолокация пользователя
-- 🎯 Настраиваемый радиус оповещения (10-200 км)
-- 📊 Статистика ударов за 5 минут
-- 🧪 Демо-режим с генерацией тестовых молний
+- 🗺️ **Интерактивная карта** - Leaflet + OpenStreetMap с фокусом на Россию
+- ⚡ **Real-time данные** - Молнии от Blitzortung API (обновление каждые 10 сек)
+- 🔊 **Звуковой эффект** - Тихий "тык" при каждом ударе молнии
+- 🔔 **Push-уведомления** - Оповещения на ПК и телефон о молниях рядом
+- 📍 **Геолокация** - Определение вашего местоположения
+- 🎯 **Радиус оповещения** - Настраиваемый радиус (10-200 км)
+- 📊 **Статистика** - Удары за 5 минут с разделением на реальные/демо
+- 🧪 **Демо-режим** - Автоматически включается если API недоступен
 
 ## 🚀 Быстрый старт
 
-### Локальный запуск
+### Локальная разработка
 
 ```bash
+cd lightning-map
 npm install
 npm run dev
 ```
 
 Откройте http://localhost:5173
 
-## 📡 API Blitzortung - ИСТОЧНИКИ ДАННЫХ
+### Сборка для продакшена
 
-### ✅ Подтверждённые рабочие endpoint'ы
-
-**Основной источник (Европа/Западная Россия):**
-```
-https://data.blitzortung.org/Data_Region_7/Processed/JSON/Lightning.GeoJSON
+```bash
+npm run build
+npm run preview
 ```
 
-**Альтернативный источник (Азия/Восточная Россия):**
+## 📁 Структура проекта
+
 ```
-https://data.blitzortung.org/Data_Region_6/Processed/JSON/Lightning.GeoJSON
+lightning-map/
+├── src/
+│   ├── App.jsx          # Основной код приложения
+│   └── App.css          # Стили
+├── public/
+│   ├── thunder.mp3      # Звук грома
+│   └── favicon.svg      # Иконка
+├── netlify/
+│   └── functions/
+│       └── proxy-blitzortung.js  # Serverless функция для API
+├── netlify.toml         # Конфигурация Netlify
+├── package.json
+└── dist/                # Сборка (создаётся автоматически)
 ```
 
-### ❌ НЕ РАБОТАЮТ (устаревшие):
-- `https://api.blitzortung.org/map/v1/strokes` - не существует
-- `https://blitzortung-api.vercel.app/api/strikes` - deployment not found
-- `https://blitzortung-api.onrender.com/api/strikes` - not found
+## 🌐 API Blitzortung
 
-### Официальные ресурсы Blitzortung
+### Источники данных
 
-- **Сайт:** https://blitzortung.org
-- **Live карта:** https://maps.blitzortung.org
-- **Документация:** https://blitzortung.org/en/documentation.php
+- **Region 7 (Европа/Западная Россия):** 
+  `https://data.blitzortung.org/Data_Region_7/Processed/JSON/Lightning.GeoJSON`
+  
+- **Region 6 (Азия/Восточная Россия):**
+  `https://data.blitzortung.org/Data_Region_6/Processed/JSON/Lightning.GeoJSON`
 
-> ⚠️ **Важно:** SSL сертификат blitzortung.org имеет проблемы, поэтому мы используем CORS proxy для доступа к данным.
+### Документация
 
-### Формат ответа API (GeoJSON)
+- Официальный сайт: https://blitzortung.org
+- Live карта: https://maps.blitzortung.org
+- Документация: https://blitzortung.org/en/documentation.php
+
+### Формат данных
+
+GeoJSON с координатами `[longitude, latitude]`:
 
 ```json
 {
@@ -61,83 +78,86 @@ https://data.blitzortung.org/Data_Region_6/Processed/JSON/Lightning.GeoJSON
       "type": "Feature",
       "geometry": {
         "type": "Point",
-        "coordinates": [долгота, широта]
+        "coordinates": [37.6176, 55.7558]
       },
       "properties": {
-        "id": "номер",
-        "time": unix_timestamp_в_секундах,
-        "intensity": сила_удара_в_kA
+        "time": 1234567890,
+        "intensity": 25
       }
     }
   ]
 }
 ```
 
-## 🔧 CORS Proxy
+## 🔧 Деплой на Netlify (БЕСПЛАТНО)
 
-Для обхода CORS ограничений и проблем с SSL используется публичный proxy:
+См. подробную инструкцию в [DEPLOY_INSTRUCTION.md](./DEPLOY_INSTRUCTION.md)
+
+### Кратко:
+
+1. Запушьте код на GitHub
+2. Зайдите на [netlify.com](https://netlify.com)
+3. Import из GitHub
+4. Настройте:
+   - Build command: `npm run build`
+   - Publish directory: `dist`
+   - Functions directory: `netlify/functions`
+5. Deploy!
+
+## 🎯 Как это работает
+
+### Обход CORS
+
+Blitzortung API не поддерживает CORS напрямую, поэтому используем Netlify Functions:
+
 ```
-https://api.allorigins.win/raw?url=<ENCODED_URL>
-```
-
-## 🌐 Деплой на Vercel
-
-### Шаг 1: Подготовьте проект
-
-```bash
-cd lightning-map
-npm install
-npm run build
-```
-
-### Шаг 2: Залейте код на GitHub
-
-```bash
-git init
-git add .
-git commit -m "⚡ Lightning Map Russia"
-git branch -M main
-git remote add origin https://github.com/ВАШ_НИК/lightning-map.git
-git push -u origin main
+Браузер → /api/blitzortung → Netlify Function → Blitzortung API
 ```
 
-### Шаг 3: Подключите к Vercel
+Serverless функция делает запрос на стороне сервера и возвращает данные с правильными CORS заголовками.
 
-1. Перейдите на [vercel.com](https://vercel.com)
-2. Войдите через GitHub
-3. Нажмите **"Add New Project"**
-4. Выберите репозиторий `lightning-map`
-5. Нажмите **"Deploy"**
+### Уведомления
 
-Готово! Ваш сайт будет доступен по адресу `https://lightning-map.vercel.app`
+1. Пользователь разрешает уведомления
+2. При новой молнии вычисляется расстояние до пользователя
+3. Если расстояние < радиуса - отправляется Push-уведомление
+4. Воспроизводится звук "тык"
 
-## 📱 Уведомления
+### Демо-режим
 
-Для работы уведомлений:
-1. Разрешите доступ к геолокации
-2. Разрешите push-уведомления в браузере
-3. Установите желаемый радиус оповещения
+Если API недоступен, генерируются случайные молнии по территории России для демонстрации функционала.
 
-Уведомления работают на:
-- ✅ ПК (Chrome, Firefox, Edge, Safari)
-- ✅ Android (Chrome, Firefox)
-- ✅ iOS (Safari)
+## 📱 Мобильные уведомления
+
+### Android
+1. Откройте сайт в Chrome
+2. ⋮ → "Добавить на главный экран"
+3. Разрешите уведомления
+
+### iOS
+1. Откройте сайт в Safari
+2. 📤 → "На экран «Домой»"
+3. Уведомления работают с iOS 16.4+
 
 ## 🛠 Технологии
 
-- React 18
-- Vite
-- Leaflet (карты)
-- Axios (HTTP запросы)
-- Web Audio API (звуки)
-- Notification API (уведомления)
+- **React** + Vite
+- **Leaflet** - интерактивные карты
+- **Netlify Functions** - serverless прокси для API
+- **Web Notifications API** - push-уведомления
+- **Geolocation API** - определение местоположения
+- **Audio API** - воспроизведение звука
 
-## 📝 Примечания
+## 📝 Лицензия
 
-- Приложение автоматически переключается между Region 6 и Region 7 для полного покрытия России
-- Если API недоступен, включается демо-режим с генерацией случайных молний
-- Звук "тык" воспроизводится при каждом новом ударе молнии
-- Данные обновляются каждые 10 секунд
+MIT License
+
+## 🙏 Благодарности
+
+- Данные: [Blitzortung.org](https://blitzortung.org)
+- Карта: [OpenStreetMap](https://openstreetmap.org)
+- Иконки: SVG эмодзи
 
 ---
-Создано с ❤️ для отслеживания молний в России
+
+**Удачи с проектом!** ⚡🗺️

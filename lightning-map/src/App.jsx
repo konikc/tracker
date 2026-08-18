@@ -1,28 +1,11 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import L from 'leaflet'
-import axios from 'axios'
 import 'leaflet/dist/leaflet.css'
 import './App.css'
 
-// Blitzortung API через прокси для обхода CORS
-// Используем несколько источников для надёжности
-const API_SOURCES = [
-  // Основной источник - данные Blitzortung через CORS proxy
-  {
-    name: 'Blitzortung Region 7 (Europe/Russia)',
-    url: 'https://data.blitzortung.org/Data_Region_7/Processed/JSON/Lightning.GeoJSON',
-    region: 7
-  },
-  // Альтернативный регион для Азии/Восточной России
-  {
-    name: 'Blitzortung Region 6 (Asia)',
-    url: 'https://data.blitzortung.org/Data_Region_6/Processed/JSON/Lightning.GeoJSON',
-    region: 6
-  }
-]
-
-// CORS прокси для обхода ограничений (используем публичный proxy)
-const CORS_PROXY = 'https://api.allorigins.win/raw?url='
+// API конфигурация - используем Netlify Functions для обхода CORS
+const API_BASE = '/api/blitzortung'
+const FALLBACK_TO_DEMO = true
 
 // Sound effect for lightning
 const thunderSound = new Audio('/thunder.mp3')
@@ -35,9 +18,10 @@ function App() {
   const [notificationsEnabled, setNotificationsEnabled] = useState(false)
   const [soundEnabled, setSoundEnabled] = useState(true)
   const [userLocation, setUserLocation] = useState(null)
-  const [alertRadius, setAlertRadius] = useState(50) // km
+  const [alertRadius, setAlertRadius] = useState(50)
   const [lastLightningTime, setLastLightningTime] = useState(null)
-  const animationFrameRef = useRef(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState(null)
 
   // Request notification permission
   const requestNotificationPermission = async () => {
@@ -49,16 +33,18 @@ function App() {
     const permission = await Notification.requestPermission()
     if (permission === 'granted') {
       setNotificationsEnabled(true)
-      new Notification('Уведомления включены', {
-        body: 'Вы будете получать уведомления о молниях рядом с вами',
+      new Notification('✅ Уведомления включены!', {
+        body: 'Вы будете получать оповещения о молниях рядом с вами',
         icon: '/favicon.svg'
       })
+    } else {
+      alert('Уведомления не разрешены')
     }
   }
 
   // Get user location
-  const getUserLocation = useCallback(() => {
-    if (navigator.geolocation) {
+  useEffect(() => {
+    if ('geolocation' in navigator) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
           const loc = {
@@ -106,7 +92,7 @@ function App() {
 
   // Calculate distance between two points (Haversine formula)
   const calculateDistance = (lat1, lon1, lat2, lon2) => {
-    const R = 6371 // Earth's radius in km
+    const R = 6371
     const dLat = ((lat2 - lat1) * Math.PI) / 180
     const dLon = ((lon2 - lon1) * Math.PI) / 180
     const a =
@@ -127,54 +113,103 @@ function App() {
     }
   }, [soundEnabled])
 
-  // Fetch lightning data from Blitzortung
-  // Используем несколько источников API для надёжности
+  // Generate demo lightning for testing
+  const generateDemoLightnings = useCallback(() => {
+    const russiaBounds = {
+      lat: [41, 77],
+      lng: [27, 169]
+    }
+    
+    const count = Math.floor(Math.random() * 5) + 3
+    const demoLightnings = []
+    
+    for (let i = 0; i < count; i++) {
+      demoLightnings.push({
+        id: `demo-${Date.now()}-${i}`,
+        lat: russiaBounds.lat[0] + Math.random() * (russiaBounds.lat[1] - russiaBounds.lat[0]),
+        lng: russiaBounds.lng[0] + Math.random() * (russiaBounds.lng[1] - russiaBounds.lng[0]),
+        time: Date.now(),
+        strength: Math.floor(Math.random() * 50) + 10,
+        isDemo: true
+      })
+    }
+    
+    return demoLightnings
+  }, [])
+
+  // Fetch lightning data from Blitzortung via Netlify Function
   const fetchLightningData = useCallback(async () => {
     try {
       const now = Date.now()
-      let allLightnings = []
+      setIsLoading(true)
+      setError(null)
       
-      // Пробуем каждый источник API
-      for (const source of API_SOURCES) {
-        try {
-          // Используем CORS proxy для обхода ограничений
-          const proxiedUrl = `${CORS_PROXY}${encodeURIComponent(source.url)}&_t=${now}`
-          
-          const response = await axios.get(proxiedUrl, {
-            timeout: 8000,
-            headers: {
-              'Accept': 'application/json'
-            }
-          })
-
-          if (response.data && response.data.features) {
-            const sourceLightnings = response.data.features.map((feature, index) => {
-              const coords = feature.geometry?.coordinates
-              if (!coords) return null
-              const props = feature.properties || {}
-              return {
-                id: `${source.region}-${props.id || now}-${index}`,
-                lat: coords[1], // GeoJSON: [longitude, latitude]
-                lng: coords[0],
-                time: props.time ? props.time * 1000 : now, // Blitzortung использует Unix timestamp в секундах
-                strength: props.intensity || Math.abs(props.strength) || 0
-              }
-            }).filter(Boolean) // Убираем null
-            
-            allLightnings = [...allLightnings, ...sourceLightnings]
+      const response = await fetch(API_BASE, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' },
+        cache: 'no-cache'
+      })
+      
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      
+      const data = await response.json()
+      
+      if (data.type === 'FeatureCollection' && Array.isArray(data.features)) {
+        const newLightnings = data.features.map((feature, index) => {
+          const coords = feature.geometry?.coordinates
+          if (!coords) return null
+          const props = feature.properties || {}
+          return {
+            id: `blitz-${now}-${index}`,
+            lat: coords[1],
+            lng: coords[0],
+            time: props.time ? props.time * 1000 : now,
+            strength: props.intensity || Math.abs(props.strength) || 0
           }
-        } catch (sourceError) {
-          console.warn(`Source ${source.name} failed:`, sourceError.message)
-          // Продолжаем с другими источниками
-        }
-      }
-
-      if (allLightnings.length > 0) {
+        }).filter(Boolean)
+        
         setLightnings(prev => {
           const filtered = prev.filter(l => now - l.time < 5 * 60 * 1000)
           const unique = [...filtered]
           
-          allLightnings.forEach(newL => {
+          let hasNewStrike = false
+          newLightnings.forEach(newL => {
+            if (!unique.find(l => l.id === newL.id)) {
+              unique.push(newL)
+              hasNewStrike = true
+              
+              if (userLocation) {
+                const distance = calculateDistance(
+                  userLocation.lat, userLocation.lng,
+                  newL.lat, newL.lng
+                )
+                
+                if (distance <= alertRadius) {
+                  sendNotification(newL)
+                  playThunderSound()
+                }
+              } else {
+                playThunderSound()
+              }
+            }
+          })
+          
+          if (hasNewStrike) setLastLightningTime(now)
+          return unique.slice(-100)
+        })
+      }
+    } catch (err) {
+      console.error('API Error:', err.message)
+      setError(err.message)
+      
+      if (FALLBACK_TO_DEMO) {
+        const demoLightnings = generateDemoLightnings()
+        setLightnings(prev => {
+          const now = Date.now()
+          const filtered = prev.filter(l => now - l.time < 5 * 60 * 1000)
+          const unique = [...filtered]
+          
+          demoLightnings.forEach(newL => {
             if (!unique.find(l => l.id === newL.id)) {
               unique.push(newL)
               
@@ -197,197 +232,133 @@ function App() {
           setLastLightningTime(now)
           return unique.slice(-100)
         })
-      } else if (lightnings.length === 0) {
-        // Если нет данных из API, используем демо-режим
-        console.log('No lightning data from API, using demo mode')
       }
-    } catch (error) {
-      console.error('Error fetching lightning data:', error)
-      if (lightnings.length === 0) {
-        generateDemoLightning()
-      }
+    } finally {
+      setIsLoading(false)
     }
-  }, [userLocation, alertRadius, sendNotification, playThunderSound, lightnings.length])
-
-  // Generate demo lightning for testing
-  const generateDemoLightning = useCallback(() => {
-    const russiaBounds = {
-      lat: [41, 77],
-      lng: [27, 169]
-    }
-    
-    const demoLightning = {
-      id: `demo-${Date.now()}`,
-      lat: russiaBounds.lat[0] + Math.random() * (russiaBounds.lat[1] - russiaBounds.lat[0]),
-      lng: russiaBounds.lng[0] + Math.random() * (russiaBounds.lng[1] - russiaBounds.lng[0]),
-      time: Date.now(),
-      strength: (Math.random() * 100 - 50).toFixed(1)
-    }
-
-    setLightnings(prev => {
-      const updated = [...prev, demoLightning].slice(-100)
-      
-      if (userLocation) {
-        const distance = calculateDistance(
-          userLocation.lat, userLocation.lng,
-          demoLightning.lat, demoLightning.lng
-        )
-        
-        if (distance <= alertRadius) {
-          sendNotification(demoLightning)
-          playThunderSound()
-        }
-      } else {
-        playThunderSound()
-      }
-      
-      return updated
-    })
-  }, [userLocation, alertRadius, sendNotification, playThunderSound])
+  }, [userLocation, alertRadius, sendNotification, playThunderSound, generateDemoLightnings])
 
   // Initialize map
   useEffect(() => {
     if (!mapRef.current) {
-      mapRef.current = L.map('map').setView([60, 90], 5)
-
+      mapRef.current = L.map('map').setView([60, 90], 4)
+      
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors | Lightning data: Blitzortung.org',
-        maxZoom: 18
+        attribution: '© OpenStreetMap contributors | © Blitzortung.org',
+        maxZoom: 10,
+        minZoom: 3
       }).addTo(mapRef.current)
-
-      L.control.scale({ imperial: false, metric: true }).addTo(mapRef.current)
-    }
-
-    return () => {
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current)
-      }
     }
   }, [])
 
-  // Update markers when lightnings change
+  // Update markers
   useEffect(() => {
     if (!mapRef.current) return
-
+    
+    // Clear existing markers
     markersRef.current.forEach(marker => marker.remove())
     markersRef.current = []
-
+    
+    // Add new markers
     lightnings.forEach(lightning => {
       const age = Date.now() - lightning.time
       const opacity = Math.max(0.3, 1 - age / (5 * 60 * 1000))
       
-      const color = lightning.strength > 0 ? '#ff6b6b' : '#4ecdc4'
+      const color = lightning.isDemo ? '#ff9800' : '#ffeb3b'
+      const size = Math.min(20, Math.max(8, lightning.strength / 3))
       
-      const circle = L.circleMarker([lightning.lat, lightning.lng], {
-        radius: 8,
+      const marker = L.circleMarker([lightning.lat, lightning.lng], {
+        radius: size,
         fillColor: color,
         color: '#fff',
         weight: 2,
         opacity: 1,
         fillOpacity: opacity
       }).addTo(mapRef.current)
-
-      circle.bindPopup(`
-        <strong>⚡ Удар молнии</strong><br/>
+      
+      marker.bindPopup(`
+        <strong>⚡ Молния</strong><br/>
         Время: ${new Date(lightning.time).toLocaleTimeString()}<br/>
-        Сила: ${lightning.strength} kA<br/>
-        Координаты: ${lightning.lat.toFixed(4)}, ${lightning.lng.toFixed(4)}
+        Сила: ${lightning.strength}<br/>
+        ${lightning.isDemo ? '(Демо)' : '(Реальные данные)'}
       `)
-
-      markersRef.current.push(circle)
+      
+      markersRef.current.push(marker)
     })
   }, [lightnings])
 
-  // Poll for new lightning data
+  // Poll for new data
   useEffect(() => {
     fetchLightningData()
     const interval = setInterval(fetchLightningData, 10000)
     return () => clearInterval(interval)
   }, [fetchLightningData])
 
-  // Demo mode - generate random lightning
-  useEffect(() => {
-    const demoInterval = setInterval(() => {
-      if (Math.random() > 0.7) {
-        generateDemoLightning()
-      }
-    }, 3000)
-    
-    return () => clearInterval(demoInterval)
-  }, [generateDemoLightning])
+  // Stats
+  const recentLightnings = lightnings.filter(l => Date.now() - l.time < 5 * 60 * 1000)
+  const demoCount = recentLightnings.filter(l => l.isDemo).length
+  const realCount = recentLightnings.length - demoCount
 
   return (
     <div className="app">
       <div id="map"></div>
       
-      <div className="controls-panel">
+      <div className="controls">
         <h1>⚡ Карта Молний России</h1>
-        <p className="subtitle">Real-time отслеживание ударов молний через Blitzortung</p>
         
         <div className="stats">
-          <div className="stat-item">
-            <span className="stat-value">{lightnings.length}</span>
+          <div className="stat">
+            <span className="stat-value">{recentLightnings.length}</span>
             <span className="stat-label">Ударов за 5 мин</span>
           </div>
-          <div className="stat-item">
-            <span className="stat-value">
-              {lastLightningTime 
-                ? new Date(lastLightningTime).toLocaleTimeString() 
-                : '--:--'}
-            </span>
-            <span className="stat-label">Последний удар</span>
-          </div>
+          {realCount > 0 && (
+            <div className="stat">
+              <span className="stat-value real">{realCount}</span>
+              <span className="stat-label">Реальных</span>
+            </div>
+          )}
+          {demoCount > 0 && (
+            <div className="stat">
+              <span className="stat-value demo">{demoCount}</span>
+              <span className="stat-label">Демо</span>
+            </div>
+          )}
         </div>
 
-        <div className="controls">
-          <button 
-            onClick={requestNotificationPermission}
-            className={`control-btn ${notificationsEnabled ? 'active' : ''}`}
-          >
-            🔔 Уведомления {notificationsEnabled ? '✓' : ''}
+        {isLoading && <div className="loading">📡 Загрузка данных...</div>}
+        {error && <div className="error">⚠️ {error} (режим демо)</div>}
+        
+        <div className="control-group">
+          <button onClick={requestNotificationPermission} className={!notificationsEnabled ? 'inactive' : ''}>
+            🔔 Уведомления {notificationsEnabled ? '✅' : '❌'}
           </button>
           
-          <button 
-            onClick={() => setSoundEnabled(!soundEnabled)}
-            className={`control-btn ${soundEnabled ? 'active' : ''}`}
-          >
-            🔊 Звук {soundEnabled ? '✓' : ''}
-          </button>
-          
-          <button 
-            onClick={getUserLocation}
-            className="control-btn"
-          >
-            📍 Моё место
+          <button onClick={() => setSoundEnabled(!soundEnabled)} className={!soundEnabled ? 'inactive' : ''}>
+            🔊 Звук {soundEnabled ? '✅' : '❌'}
           </button>
         </div>
 
-        {userLocation && (
-          <div className="alert-settings">
-            <label>
-              Радиус оповещения: {alertRadius} км
-              <input
-                type="range"
-                min="10"
-                max="200"
-                value={alertRadius}
-                onChange={(e) => setAlertRadius(Number(e.target.value))}
-              />
-            </label>
-          </div>
-        )}
+        <div className="control-group">
+          <label>
+            📍 Радиус оповещения: {alertRadius} км
+            <input
+              type="range"
+              min="10"
+              max="200"
+              value={alertRadius}
+              onChange={(e) => setAlertRadius(Number(e.target.value))}
+            />
+          </label>
+        </div>
 
-        <div className="info-panel">
-          <h3>ℹ️ О проекте</h3>
-          <p>
-            Данные предоставляются API <a href="https://blitzortung.org" target="_blank">Blitzortung.org</a>
-          </p>
-          <p>
-            Для работы уведомлений разрешите доступ к геолокации и уведомлениям в браузере.
-          </p>
-          <p className="note">
-            ⚠️ В демо-режиме генерируются случайные молнии для тестирования.
-          </p>
+        <div className="info">
+          <p>🗺️ Данные: <a href="https://blitzortung.org" target="_blank" rel="noopener noreferrer">Blitzortung.org</a></p>
+          <p>🔄 Обновление: каждые 10 секунд</p>
+          {userLocation ? (
+            <p>📍 Вы: {userLocation.lat.toFixed(2)}, {userLocation.lng.toFixed(2)}</p>
+          ) : (
+            <p>📍 Местоположение не определено</p>
+          )}
         </div>
       </div>
     </div>
